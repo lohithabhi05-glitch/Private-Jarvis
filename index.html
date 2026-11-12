@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>J.A.R.V.I.S. // Stark Industries HUD</title>
+  <!-- Three.js for 3D Arc Reactor Rendering -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- Sci-Fi HUD Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-matte: #070709;
+      --gold-primary: #D4AF37;
+      --gold-bright: #FFDF73;
+      --gold-dim: #735922;
+      --gold-glow: rgba(212, 175, 55, 0.4);
+      --hud-panel-bg: rgba(14, 13, 10, 0.75);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body {
+      background-color: var(--bg-matte);
+      color: var(--gold-primary);
+      font-family: 'Share Tech Mono', monospace;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    /* Subtle HUD Scanline & Vignette Effect */
+    body::before {
+      content: " ";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at center, transparent 40%, rgba(0,0,0,0.85) 90%),
+                  repeating-linear-gradient(0deg, rgba(212, 175, 55, 0.02) 0px, rgba(212, 175, 55, 0.02) 1px, transparent 2px, transparent 4px);
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* 3D WebGL Reactor Canvas */
+    #reactor-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    /* Overlay HUD Layout */
+    .hud-container {
+      position: relative;
+      z-index: 2;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: env(safe-area-inset-top, 16px) 16px env(safe-area-inset-bottom, 16px) 16px;
+      pointer-events: none;
+    }
+
+    /* Top Status Bar */
+    .header-panel {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--gold-dim);
+      padding-bottom: 8px;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 1.5px;
+    }
+
+    .brand-tag {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 900;
+      color: var(--gold-bright);
+      text-shadow: 0 0 8px var(--gold-glow);
+    }
+
+    /* Compact Diagnostic Panels */
+    .hud-box {
+      background: var(--hud-panel-bg);
+      border: 1px solid var(--gold-dim);
+      padding: 10px;
+      position: relative;
+      backdrop-filter: blur(4px);
+      box-shadow: inset 0 0 10px rgba(212, 175, 55, 0.05);
+    }
+
+    /* Gold Sci-Fi Corner Brackets */
+    .hud-box::before, .hud-box::after {
+      content: '';
+      position: absolute;
+      width: 6px;
+      height: 6px;
+      border-color: var(--gold-bright);
+      border-style: solid;
+    }
+    .hud-box::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+    .hud-box::after { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+
+    .telemetry-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 10px;
+    }
+
+    .metric-title {
+      font-size: 9px;
+      color: var(--gold-dim);
+      margin-bottom: 2px;
+    }
+
+    .metric-value {
+      font-size: 13px;
+      font-weight: bold;
+      color: var(--gold-bright);
+    }
+
+    .gauge-bar {
+      width: 100%;
+      height: 4px;
+      background: #1a170d;
+      margin-top: 4px;
+      position: relative;
+    }
+    .gauge-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--gold-dim), var(--gold-bright));
+      box-shadow: 0 0 6px var(--gold-glow);
+      transition: width 0.5s ease;
+    }
+
+    /* Center Overlay Voice Readout */
+    .voice-terminal {
+      text-align: center;
+      margin: auto 0;
+      pointer-events: auto;
+    }
+
+    .jarvis-status {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 14px;
+      letter-spacing: 3px;
+      color: var(--gold-bright);
+      text-shadow: 0 0 12px var(--gold-glow);
+      margin-bottom: 8px;
+    }
+
+    .transcript-box {
+      font-size: 12px;
+      color: #dfcaa0;
+      min-height: 24px;
+      max-width: 80%;
+      margin: 0 auto;
+      text-shadow: 0 0 4px rgba(0,0,0,0.8);
+    }
+
+    /* Bottom Interactive Command Bar */
+    .footer-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      pointer-events: auto;
+    }
+
+    .btn-handsfree {
+      background: linear-gradient(180deg, #1f1a0e, #0e0d0a);
+      border: 1px solid var(--gold-primary);
+      color: var(--gold-bright);
+      font-family: 'Orbitron', sans-serif;
+      font-size: 12px;
+      letter-spacing: 2px;
+      padding: 14px;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      cursor: pointer;
+      box-shadow: 0 0 15px var(--gold-glow);
+      transition: 0.3s;
+    }
+
+    .btn-handsfree.active {
+      border-color: #ffe685;
+      background: linear-gradient(180deg, #382d12, #141108);
+      box-shadow: 0 0 25px var(--gold-bright);
+    }
+
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--gold-bright);
+      box-shadow: 0 0 8px var(--gold-bright);
+    }
+
+    .active .pulse-dot {
+      animation: corePulse 1s infinite alternate;
+    }
+
+    @keyframes corePulse {
+      0% { opacity: 0.3; transform: scale(0.8); }
+      100% { opacity: 1; transform: scale(1.4); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- WebGL 3D Arc Reactor Background -->
+  <canvas id="reactor-canvas"></canvas>
+
+  <!-- Futuristic Stark HUD Overlay -->
+  <div class="hud-container">
+    
+    <!-- Top Status Diagnostics -->
+    <div>
+      <div class="header-panel">
+        <span class="brand-tag">STARK INDUSTRIES</span>
+        <span id="clock">00:00:00</span>
+        <span>SYS: <span style="color:var(--gold-bright)">ONLINE</span></span>
+      </div>
+
+      <div class="telemetry-grid">
+        <div class="hud-box">
+          <div class="metric-title">// ARC CORE VOLTAGE</div>
+          <div class="metric-value" id="core-volt">8.42 GIGA-JOULES</div>
+          <div class="gauge-bar"><div class="gauge-fill" style="width: 88%;"></div></div>
+        </div>
+        <div class="hud-box">
+          <div class="metric-title">// CPU SYNAPSE LOAD</div>
+          <div class="metric-value" id="cpu-load">14% NOMINAL</div>
+          <div class="gauge-bar"><div class="gauge-fill" id="cpu-gauge" style="width: 14%;"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Central Audio Visualizer & Voice State -->
+    <div class="voice-terminal">
+      <div class="jarvis-status" id="jarvis-state">ARC CORE STANDBY</div>
+      <div class="transcript-box" id="transcript">Awaiting activation... Say "Jarvis" or tap below.</div>
+    </div>
+
+    <!-- Bottom Controls & Network Diagnostics -->
+    <div class="footer-panel">
+      <div class="hud-box" style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <div class="metric-title">HANDS-FREE PROTOCOL</div>
+          <div class="metric-value" style="font-size:11px;" id="mic-status">LISTENING OFF</div>
+        </div>
+        <div class="metric-value" style="font-size: 11px;">FREQ: 2.45 GHz</div>
+      </div>
+
+      <button class="btn-handsfree" id="btn-toggle-hf" onclick="toggleHandsFree()">
+        <span class="pulse-dot"></span>
+        <span id="btn-label">ACTIVATE HANDS-FREE</span>
+      </button>
+    </div>
+
+  </div>
+
+  <script>
+    /* ==========================================================
+       1. 3D METALLIC GOLD ARC REACTOR (THREE.JS)
+       ========================================================== */
+    const canvas = document.getElementById('reactor-canvas');
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.z = 7;
+
+    const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+
+    // Dynamic Lighting for Metallic Reflectivity
+    const ambientLight = new THREE.AmbientLight(0xffdf73, 0.4);
+    scene.add(ambientLight);
+
+    const goldPoint = new THREE.PointLight(0xffd700, 2.5, 50);
+    goldPoint.position.set(0, 0, 3);
+    scene.add(goldPoint);
+
+    const blueCoreLight = new THREE.PointLight(0xfffae0, 3, 20);
+    scene.add(blueCoreLight);
+
+    // Metallic Gold Material
+    const goldMaterial = new THREE.MeshStandardMaterial({
+      color: 0xD4AF37,
+      metalness: 0.9,
+      roughness: 0.25,
+      wireframe: false
+    });
+
+    const goldWireMaterial = new THREE.MeshBasicMaterial({
+      color: 0xFFDF73,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.35
+    });
+
+    const reactorGroup = new THREE.Group();
+    scene.add(reactorGroup);
+
+    // Layer 1: Core Sphere
+    const coreGeo = new THREE.IcosahedronGeometry(0.7, 2);
+    const coreMesh = new THREE.Mesh(coreGeo, goldWireMaterial);
+    reactorGroup.add(coreMesh);
+
+    // Layer 2: Inner Segmented Torus
+    const innerRingGeo = new THREE.TorusGeometry(1.3, 0.05, 16, 60);
+    const innerRing = new THREE.Mesh(innerRingGeo, goldMaterial);
+    reactorGroup.add(innerRing);
+
+    // Layer 3: Concentric Mechanical Rings
+    const midRingGeo = new THREE.TorusGeometry(1.8, 0.04, 16, 80);
+    const midRing = new THREE.Mesh(midRingGeo, goldWireMaterial);
+    reactorGroup.add(midRing);
+
+    const outerRingGeo = new THREE.TorusGeometry(2.3, 0.08, 16, 100);
+    const outerRing = new THREE.Mesh(outerRingGeo, goldMaterial);
+    reactorGroup.add(outerRing);
+
+    // Segmented Outer Notches
+    for(let i = 0; i < 12; i++) {
+      const angle = (i / 12) * Math.PI * 2;
+      const notchGeo = new THREE.BoxGeometry(0.12, 0.3, 0.08);
+      const notch = new THREE.Mesh(notchGeo, goldMaterial);
+      notch.position.set(Math.cos(angle) * 2.3, Math.sin(angle) * 2.3, 0);
+      notch.rotation.z = angle;
+      reactorGroup.add(notch);
+    }
+
+    // Animation Render Loop
+    let reactorSpeed = 0.01;
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // Distinct layered rotation vectors
+      coreMesh.rotation.y += 0.01;
+      coreMesh.rotation.x += 0.005;
+
+      innerRing.rotation.z -= reactorSpeed * 1.5;
+      innerRing.rotation.x = Math.sin(Date.now() * 0.001) * 0.2;
+
+      midRing.rotation.z += reactorSpeed * 2.0;
+      midRing.rotation.y = Math.cos(Date.now() * 0.001) * 0.2;
+
+      outerRing.rotation.z -= reactorSpeed * 0.7;
+
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // Resize Handler for Mobile Viewports
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    /* ==========================================================
+       2. HANDS-FREE VOICE ASSISTANT ENGINE (J.A.R.V.I.S.)
+       ========================================================== */
+    let isHandsFree = false;
+    let recognition = null;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    const jarvisStateEl = document.getElementById('jarvis-state');
+    const transcriptEl = document.getElementById('transcript');
+    const micStatusEl = document.getElementById('mic-status');
+    const btnToggle = document.getElementById('btn-toggle-hf');
+    const btnLabel = document.getElementById('btn-label');
+
+    // Speech Synthesizer Voice Output
+    function jarvisSpeak(text, callback) {
+      if (!window.speechSynthesis) return;
+
+      // Pulse reactor on speech
+      reactorSpeed = 0.04;
+      goldPoint.intensity = 4.5;
+
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.pitch = 0.95; // Authoritative British tone emulation
+      utterance.rate = 1.05;
+
+      // Select preferred voice if available
+      const voices = window.speechSynthesis.getVoices();
+      const britishVoice = voices.find(v => v.lang.includes('en-GB') || v.name.includes('UK') || v.name.includes('Oliver'));
+      if (britishVoice) utterance.voice = britishVoice;
+
+      utterance.onend = () => {
+        reactorSpeed = 0.01;
+        goldPoint.intensity = 2.5;
+        if (callback) callback();
+      };
+
+      window.speechSynthesis.speak(utterance);
+    }
+
+    // Initialize Voice Recognition
+    if (SpeechRecognition) {
+      recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => {
+        micStatusEl.textContent = "CONTINUOUS SCANNING";
+        micStatusEl.style.color = "var(--gold-bright)";
+        jarvisStateEl.textContent = "SYSTEM LISTENING";
+      };
+
+      recognition.onresult = (event) => {
+        const lastIndex = event.results.length - 1;
+        const speech = event.results[lastIndex][0].transcript.trim().toLowerCase();
+        transcriptEl.textContent = `"${speech.toUpperCase()}"`;
+        processJarvisCommand(speech);
+      };
+
+      recognition.onerror = (e) => {
+        console.warn("Speech API Notice: ", e.error);
+        if (e.error === 'not-allowed') {
+          stopHandsFree();
+          alert("Microphone permission required for hands-free Stark HUD.");
+        }
+      };
+
+      recognition.onend = () => {
+        // Continuous hands-free auto-reconnect loop
+        if (isHandsFree) {
+          try { recognition.start(); } catch(err){}
+        } else {
+          micStatusEl.textContent = "LISTENING OFF";
+          micStatusEl.style.color = "var(--gold-dim)";
+          jarvisStateEl.textContent = "ARC CORE STANDBY";
+        }
+      };
+    } else {
+      transcriptEl.textContent = "Web Speech API not supported on this browser engine.";
+    }
+
+    // Toggle Continuous Hands-Free Mode
+    function toggleHandsFree() {
+      if (!recognition) return;
+
+      if (!isHandsFree) {
+        isHandsFree = true;
+        btnToggle.classList.add('active');
+        btnLabel.textContent = "DISENGAGE HANDS-FREE";
+        recognition.start();
+
+        // Jarvis always initiates contact with "Hi Boss"
+        jarvisSpeak("Hi Boss. Stark Industries HUD online. All arc subsystems green. How can I assist you?");
+      } else {
+        stopHandsFree();
+      }
+    }
+
+    function stopHandsFree() {
+      isHandsFree = false;
+      btnToggle.classList.remove('active');
+      btnLabel.textContent = "ACTIVATE HANDS-FREE";
+      if (recognition) recognition.stop();
+      jarvisSpeak("Standing down, Boss.");
+    }
+
+    // Natural Language Command Processing
+    function processJarvisCommand(cmd) {
+      // Direct wake-word or question matching
+      if (cmd.includes("jarvis") || cmd.includes("boss") || isHandsFree) {
+        
+        if (cmd.includes("time") || cmd.includes("clock")) {
+          const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          jarvisSpeak(`Hi Boss. The current time is ${now}.`);
+        } 
+        else if (cmd.includes("status") || cmd.includes("diagnostic") || cmd.includes("system")) {
+          jarvisSpeak("Hi Boss. Reactor power core is at 100 percent. Synapse load nominal. All defense telemetry is secure.");
+        }
+        else if (cmd.includes("power") || cmd.includes("reactor")) {
+          jarvisSpeak("Hi Boss. Arc reactor output generating 8.42 giga joules. Power grid stable.");
+        }
+        else if (cmd.includes("who are you")) {
+          jarvisSpeak("Hi Boss. I am Jarvis, your autonomous digital tactical interface.");
+        }
+        else {
+          // Standard response adhering strictly to "Hi Boss" protocol
+          jarvisSpeak(`Hi Boss. Confirming request: ${cmd}. Processing tactical algorithms now.`);
+        }
+      }
+    }
+
+    /* ==========================================================
+       3. TELEMETRY & SYSTEM GAUGES TICKER
+       ========================================================== */
+    setInterval(() => {
+      // Live Clock
+      const d = new Date();
+      document.getElementById('clock').textContent = d.toTimeString().split(' ')[0];
+
+      // Dynamic Simulated CPU and Voltage fluctuations
+      const randomCpu = Math.floor(10 + Math.random() * 16);
+      document.getElementById('cpu-load').textContent = `${randomCpu}% NOMINAL`;
+      document.getElementById('cpu-gauge').style.width = `${randomCpu * 2.5}%`;
+    }, 1000);
+  </script>
+</body>
+</html>
